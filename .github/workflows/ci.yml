@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_PYTHON: "3.12"
+
+jobs:
+  config:
+    name: Repository configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.6"
+          enable-cache: true
+      - name: Check pinned images and MCP configuration
+        run: uv run --with pyyaml==6.0.3 python scripts/check_config.py
+      - name: Validate Compose files
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example -f docker-compose.yaml -f docker-compose.ci.yaml config --quiet
+      - name: Check helper scripts
+        run: |
+          uvx ruff==0.15.14 format --check scripts
+          uvx ruff==0.15.14 check scripts
+      - name: Run TOML and Markdown pre-commit hooks
+        run: |
+          uvx pre-commit==4.7.0 run taplo-format --all-files
+          uvx pre-commit==4.7.0 run taplo-lint --all-files
+          uvx pre-commit==4.7.0 run markdownlint-cli2 --all-files
+      - name: Lint workflow definitions
+        uses: rhysd/actionlint@v1.7.12
+
+  quality:
+    name: Quality / ${{ matrix.service }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - agent
+          - app
+          - backup
+          - clustering
+          - docling
+          - downloader_extra
+          - downloader_general
+          - forecaster
+          - python_sandbox
+          - triton
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-suffix: ${{ matrix.service }}
+      - name: Check lockfile
+        working-directory: ${{ matrix.service }}
+        run: uv lock --check
+      - name: Check formatting
+        working-directory: ${{ matrix.service }}
+        run: uv run --frozen ruff format --check .
+      - name: Lint
+        working-directory: ${{ matrix.service }}
+        run: uv run --frozen ruff check .
+      - name: Type-check
+        working-directory: ${{ matrix.service }}
+        run: uv run --frozen ty check .
+      - name: Unit and component tests
+        working-directory: ${{ matrix.service }}
+        run: uv run --frozen pytest
+
+  docker-build:
+    name: Docker build / ${{ matrix.service }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        # Docling is covered by its unit suite but its very large ML image is
+        # impractical on hosted runners. Triton requires the production GPU stack.
+        service:
+          - agent
+          - app
+          - backup
+          - clustering
+          - downloader_extra
+          - downloader_general
+          - forecaster
+          - python_sandbox
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image with locked dependencies
+        run: docker compose --env-file .env.example build ${{ matrix.service }}
+
+  mcp:
+    name: Live MCP integration
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.6"
+          enable-cache: true
+      - name: Start MCP backing services with fresh volumes
+        run: |
+          docker compose --env-file .env.example up -d \
+            db vector_db langfuse_clickhouse langfuse_redis langfuse_minio \
+            langfuse_web langfuse_worker grafana
+      - name: Wait for services
+        run: |
+          curl --fail --retry 60 --retry-delay 5 --retry-connrefused \
+            http://localhost:3000/api/public/health
+          curl --fail --retry 30 --retry-delay 5 --retry-connrefused \
+            http://localhost:3001/api/health
+          curl --fail --retry 30 --retry-delay 5 --retry-connrefused \
+            -H 'api-key: some_api_key' http://localhost:6333/readyz
+          curl --fail --retry 30 --retry-delay 5 --retry-connrefused \
+            -u clickhouse:change-me http://localhost:8123/ping
+      - name: Initialize every MCP server and call read-only tools
+        run: uv run --with mcp==2.3.0 python scripts/verify_mcp.py
+      - name: Stop integration stack
+        if: always()
+        run: docker compose --env-file .env.example down -v
+
+  ui:
+    name: Offline dashboard end-to-end
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free runner disk space
+        uses: jlumbroso/free-disk-space@v2.0.0
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.13.6"
+          enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "12.15.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26.12.1"
+          cache: pnpm
+          cache-dependency-path: app/e2e/pnpm-lock.yaml
+      - name: Build application images
+        run: |
+          docker compose --env-file .env.example \
+            -f docker-compose.yaml -f docker-compose.ci.yaml build \
+            app agent downloader_general downloader_extra forecaster clustering python_sandbox
+      - name: Start dashboard with offline infrastructure stubs
+        run: |
+          mkdir -p /tmp/umd-ci/downloader_general
+          touch /tmp/umd-ci/downloader_general/.download_completed
+          docker compose --env-file .env.example \
+            -f docker-compose.yaml -f docker-compose.ci.yaml up -d app
+      - name: Seed deterministic data and restart the app
+        run: |
+          docker compose --env-file .env.example \
+            -f docker-compose.yaml -f docker-compose.ci.yaml \
+            exec -T -e PYTHONPATH=/app downloader_general python /scripts/seed_test_data.py
+          docker compose --env-file .env.example \
+            -f docker-compose.yaml -f docker-compose.ci.yaml restart app
+      - name: Install Playwright
+        working-directory: app/e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Run all dashboard end-to-end tests
+        working-directory: app/e2e
+        run: pnpm exec playwright test --retries=0
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            app/e2e/test-results/
+            app/e2e/playwright-report/
+          if-no-files-found: ignore
+      - name: Stop UI stack
+        if: always()
+        run: |
+          docker compose --env-file .env.example \
+            -f docker-compose.yaml -f docker-compose.ci.yaml down -v

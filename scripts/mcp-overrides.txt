@@ -1,0 +1,4 @@
+# postgres-mcp pins the removed pglast==7.2.0 release; use the compatible replacement.
+pglast==7.20
+# postgres-mcp 0.3.0 still imports the MCP v1 FastMCP server API.
+mcp==1.26.0

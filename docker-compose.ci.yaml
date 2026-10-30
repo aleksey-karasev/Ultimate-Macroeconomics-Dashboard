@@ -1,0 +1,42 @@
+# Offline CI overrides: replace GPU Docling/Triton services with tiny health stubs.
+# Unit tests cover their real logic; Playwright tests cover the UI without external calls.
+services:
+  triton:
+    build: !reset
+    image: python:3.12.16-slim
+    deploy: !reset
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+            def log_message(self, *args):
+                pass
+        ThreadingHTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
+
+  docling:
+    build: !reset
+    image: python:3.12.16-slim
+    entrypoint: ["python", "-c"]
+    command:
+      - |
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status":"ok"}')
+            def log_message(self, *args):
+                pass
+        ThreadingHTTPServer(("0.0.0.0", 8006), Handler).serve_forever()
+
+  downloader_general:
+    volumes:
+      - /tmp/umd-ci/downloader_general:/app/_container_data
+      - ./scripts:/scripts:ro

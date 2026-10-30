@@ -31,9 +31,17 @@ def test_run_on_start_runs_due_job_once() -> None:
     assert calls == ["x"]
 
 
-def test_no_jobs_returns_immediately() -> None:
-    # Must not hang; nothing to schedule.
+def test_no_jobs_idles_until_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
+    waits: list[float | None] = []
+
+    def stop_on_wait(timeout: float | None = None) -> bool:
+        waits.append(timeout)
+        scheduler._stop.set()
+        return True
+
+    monkeypatch.setattr(scheduler._stop, "wait", stop_on_wait)
     run_scheduler([], run_on_start=True)
+    assert waits == [None]
 
 
 def test_failing_tick_does_not_crash_loop() -> None:

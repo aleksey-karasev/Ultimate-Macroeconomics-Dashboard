@@ -18,7 +18,7 @@ import json
 import logging
 from pathlib import Path
 
-from agent.config import load_config
+from agent.config import build_postgres_uri, load_config
 from agent.graph import MacroAgentGraph
 from agent.schemas import (
     ChatRequest,
@@ -60,11 +60,12 @@ PYTHON_SANDBOX_BASE_URL = f"http://python_sandbox:{CONFIG.python_sandbox.port}"
 DOWNLOADER_EXTRA_BASE_URL = f"http://downloader_extra:{CONFIG.downloader_extra.port}"
 QDRANT_URL = f"http://{CONFIG.qdrant.host}:{CONFIG.qdrant.port}"
 QDRANT_API_KEY = SETTINGS.qdrant_api_key
-POSTGRES_DATABASE_URI = (
-    f"postgresql+psycopg2://"
-    f"{SETTINGS.postgres_llm_user}:{SETTINGS.postgres_llm_password}"
-    f"@{CONFIG.postgres.host}:{CONFIG.postgres.port}"
-    f"/{SETTINGS.postgres_db or CONFIG.postgres.database}"
+POSTGRES_DATABASE_URI = build_postgres_uri(
+    username=SETTINGS.postgres_llm_user,
+    password=SETTINGS.postgres_llm_password,
+    host=CONFIG.postgres.host,
+    port=CONFIG.postgres.port,
+    database=SETTINGS.postgres_db or CONFIG.postgres.database,
 )
 OPENAI_EMBEDDING_MODEL = SHARED_CFG.openai_embedding_model
 

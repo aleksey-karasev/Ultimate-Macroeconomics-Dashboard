@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12.16-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.33 /uv /uvx /usr/local/bin/
 
 COPY pyproject.toml uv.lock ./
 
@@ -17,7 +17,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12.16-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -26,7 +26,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # rclone (cloud upload) via multi-stage copy — always a recent static binary.
-COPY --from=rclone/rclone:latest /usr/local/bin/rclone /usr/local/bin/rclone
+COPY --from=rclone/rclone:1.75.2 /usr/local/bin/rclone /usr/local/bin/rclone
 
 # tini (PID 1) + pg_dump/pg_restore pinned to the server major (18) from the
 # official PGDG apt repo. The Debian codename is resolved dynamically so this

@@ -1,0 +1,14 @@
+include = ["**/*.toml"]
+
+[formatting]
+align_entries = false
+array_auto_collapse = false
+array_auto_expand = true
+array_trailing_comma = true
+column_width = 100
+compact_arrays = true
+indent_string = "    "
+inline_table_expand = false
+reorder_arrays = false
+reorder_keys = false
+trailing_newline = true

@@ -1,5 +1,12 @@
 [environment]
 python-version = "3.12"
+extra-paths = ["triton/common"]
+
+# Triton's production-only GPU/ML dependencies and its server-provided Python
+# backend module are intentionally absent from the lean local test environment.
+[[overrides]]
+include = ["triton/common/**"]
+rules.unresolved-import = "ignore"
 
 [rules]
 unresolved-import = "warn"

@@ -3,7 +3,7 @@ name: Ultimate_Macroeconomics_Dashboard
 services:
 
   db:
-    image: postgres:18
+    image: postgres:18.6
     restart: unless-stopped
     container_name: postgres_db
     environment:
@@ -30,7 +30,7 @@ services:
       start_period: 10s
 
   vector_db:
-    image: qdrant/qdrant:v1.17
+    image: qdrant/qdrant:v1.17.1
     restart: unless-stopped
     container_name: qdrant_db
     environment:
@@ -50,6 +50,7 @@ services:
     build:
       context: downloader_general
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-downloader_general:0.15.0
     container_name: downloader_general
     # Long-running now: after the one-shot initial ingest it stays up to run the
     # per-source incremental update scheduler (config.yaml `scheduler`).
@@ -95,6 +96,7 @@ services:
     build:
       context: agent
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-agent:0.15.0
     container_name: agent
     restart: unless-stopped
     environment:
@@ -132,6 +134,7 @@ services:
     build:
       context: triton
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-triton:0.15.0
     container_name: triton
     restart: unless-stopped
     # GPU is required: Chronos + XGBoost run on CUDA and clustering uses cuML.
@@ -169,6 +172,7 @@ services:
     build:
       context: forecaster
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-forecaster:0.15.0
     container_name: forecaster
     restart: unless-stopped
     ports:
@@ -196,6 +200,7 @@ services:
     build:
       context: clustering
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-clustering:0.15.0
     container_name: clustering
     restart: unless-stopped
     ports:
@@ -223,6 +228,7 @@ services:
     build:
       context: downloader_extra
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-downloader_extra:0.15.0
     container_name: downloader_extra
     restart: unless-stopped
     environment:
@@ -253,6 +259,7 @@ services:
     build:
       context: python_sandbox
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-python_sandbox:0.15.0
     container_name: python_sandbox
     restart: unless-stopped
     ports:
@@ -278,6 +285,7 @@ services:
     build:
       context: docling
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-docling:0.15.0
     container_name: docling
     restart: unless-stopped
     # Converts document uploads to Markdown for the Streamlit chat. PDF OCR/VLM
@@ -302,6 +310,7 @@ services:
     build:
       context: backup
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-backup:0.15.0
     container_name: backup
     restart: unless-stopped
     environment:
@@ -328,6 +337,7 @@ services:
     build:
       context: app
       dockerfile: Dockerfile
+    image: ultimate_macroeconomics_dashboard-app:0.15.0
     container_name: app
     restart: unless-stopped
     environment:
@@ -379,7 +389,7 @@ services:
   # line, versioned separately from the v4 Python SDK). Only langfuse_web is
   # published to the host (:3000 UI); the rest are internal to the network.
   langfuse_worker:
-    image: langfuse/langfuse-worker:3
+    image: langfuse/langfuse-worker:3.225.15
     container_name: langfuse_worker
     restart: unless-stopped
     depends_on: &langfuse-depends-on
@@ -423,7 +433,7 @@ services:
       LANGFUSE_S3_MEDIA_UPLOAD_EXTERNAL_ENDPOINT: http://localhost:9090
 
   langfuse_web:
-    image: langfuse/langfuse:3
+    image: langfuse/langfuse:3.225.15
     container_name: langfuse_web
     restart: unless-stopped
     depends_on: *langfuse-depends-on
@@ -454,7 +464,7 @@ services:
       start_period: 120s
 
   langfuse_clickhouse:
-    image: clickhouse/clickhouse-server:24.3
+    image: clickhouse/clickhouse-server:24.3.18.7
     container_name: langfuse_clickhouse
     restart: unless-stopped
     user: "101:101"
@@ -465,6 +475,9 @@ services:
     volumes:
       - langfuse_clickhouse_data:/var/lib/clickhouse
       - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      # Loopback-only HTTP access for the local ClickHouse MCP server.
+      - 127.0.0.1:8123:8123
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1" ]
       interval: 5s
@@ -473,7 +486,7 @@ services:
       start_period: 10s
 
   langfuse_redis:
-    image: redis:7-alpine
+    image: redis:7.4.12-alpine
     container_name: langfuse_redis
     restart: unless-stopped
     command: --requirepass ${LANGFUSE_REDIS_AUTH} --maxmemory-policy noeviction
@@ -486,7 +499,10 @@ services:
       retries: 10
 
   langfuse_minio:
-    image: minio/minio:latest
+    # MinIO's Docker Hub image was withdrawn when the community edition moved
+    # to source-only distribution. Use the drop-in image from Langfuse's
+    # official Compose stack (includes sh + mc for the command/healthcheck).
+    image: cgr.dev/chainguard/minio@sha256:3b6e40c30ecd5cea627e382ff0b82ca841f58c52294578787043ee80c8ef7c82
     container_name: langfuse_minio
     restart: unless-stopped
     entrypoint: sh

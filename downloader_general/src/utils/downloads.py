@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, Optional
 from git import RemoteProgress
 import polars as pl
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 
 from src.utils import wb_client
 
@@ -311,11 +312,14 @@ def _get_sql_config(username: str, password: str, host: str, port: int, db: str)
     Returns:
         Connection URI string suitable for SQLAlchemy / psycopg.
     """
-    if db:
-        uri = f"postgresql://{username}:{password}@{host}:{port}/{db}"
-    else:
-        uri = f"postgresql://{username}:{password}@{host}:{port}"
-    return uri
+    return URL.create(
+        "postgresql",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=db or None,
+    ).render_as_string(hide_password=False)
 
 
 def _test_sql(uri: str) -> bool:

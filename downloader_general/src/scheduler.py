@@ -48,7 +48,7 @@ def run_scheduler(jobs: list[SourceJob], run_on_start: bool = False) -> None:
     """Run ``jobs`` on their per-source intervals until SIGTERM/SIGINT.
 
     Args:
-        jobs: Enabled sources to schedule (empty → the function returns at once).
+        jobs: Enabled sources to schedule (empty → idle until SIGTERM/SIGINT).
         run_on_start: When true every job runs immediately on entry; otherwise the
             first run happens one interval later (the initial ingest just ran).
     """
@@ -56,7 +56,9 @@ def run_scheduler(jobs: list[SourceJob], run_on_start: bool = False) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
     if not jobs:
-        logger.info("Scheduler: no sources enabled; nothing to schedule.")
+        logger.info("Scheduler: no sources enabled; idling until stopped.")
+        _stop.wait()
+        logger.info("Scheduler stopped.")
         return
 
     jobs_by_name = {job.name: job for job in jobs}

@@ -26,12 +26,12 @@ Technical stack (not exhaustive):
 
 |                          |                          |
 |--------------------------|--------------------------|
-|  ![](app/assets/01.png)  |  ![](app/assets/02.png)  |
-|  ![](app/assets/03.png)  |  ![](app/assets/04.png)  |
-|  ![](app/assets/05.png)  |  ![](app/assets/06.png)  |
-|  ![](app/assets/07.png)  |  ![](app/assets/08.png)  |
-|  ![](app/assets/09.png)  |  ![](app/assets/10.png)  |
-|  ![](app/assets/11.png)  |  ![](app/assets/12.png)  |
+|  ![Dashboard screenshot 1](app/assets/01.png)  |  ![Dashboard screenshot 2](app/assets/02.png)  |
+|  ![Dashboard screenshot 3](app/assets/03.png)  |  ![Dashboard screenshot 4](app/assets/04.png)  |
+|  ![Dashboard screenshot 5](app/assets/05.png)  |  ![Dashboard screenshot 6](app/assets/06.png)  |
+|  ![Dashboard screenshot 7](app/assets/07.png)  |  ![Dashboard screenshot 8](app/assets/08.png)  |
+|  ![Dashboard screenshot 9](app/assets/09.png)  |  ![Dashboard screenshot 10](app/assets/10.png)  |
+|  ![Dashboard screenshot 11](app/assets/11.png)  |  ![Dashboard screenshot 12](app/assets/12.png)  |
 
 ## Architecture
 
@@ -112,6 +112,38 @@ shared:
 ```
 
 The chat's multimodal inputs are configured the same way: voice/audio transcription under `whisper:` (defaults to the same OpenAI-compatible endpoint) and document OCR under `docling.vlm:` (`base_url` + `model` of a cloud OpenAI-compatible vision endpoint) — both authenticate with the shared `OPENAI_API_KEY`. Everything else has working defaults. See [`_container_data/config.yaml`](_container_data/config.yaml) for the full schema.
+
+## Local MCP servers
+
+`.mcp.json` configures read-only MCP access to Postgres, ClickHouse, Grafana, and Langfuse. Run MCP clients from the repository root so the pinned `uvx` commands can find `scripts/mcp-overrides.txt`. ClickHouse's HTTP API is exposed only on loopback (`127.0.0.1:8123`); the other services use their existing local ports.
+
+Generate the Langfuse Basic-auth token from your project keys and export the secrets before starting the MCP client:
+
+```bash
+export LANGFUSE_MCP_BASIC_AUTH="$(printf '%s' "${LANGFUSE_PUBLIC_KEY}:${LANGFUSE_SECRET_KEY}" | base64 -w0)"
+# Load the other credentials from the root .env as well:
+set -a; source .env; set +a
+```
+
+Verify all four servers with the running stack:
+
+```bash
+uv run --with mcp==2.3.0 python scripts/verify_mcp.py
+```
+
+The checker initializes each server and calls one read-only tool. `scripts/check_config.py` separately rejects mutable `:latest` images and missing MCP/package pins.
+
+## Continuous integration
+
+GitHub Actions runs on pull requests targeting `dev` or `main`, and on pushes to those branches. It does **not** automatically merge branches. The workflow includes:
+
+* formatting, Ruff linting, `ty`, lockfile checks, and unit/component tests for all 10 Python services;
+* Taplo TOML formatting/linting and markdownlint-cli2 checks using the shared root configs;
+* Docker builds for the application services that fit hosted runners;
+* live read-only MCP integration against fresh Postgres, Qdrant, ClickHouse, and Langfuse/Grafana services;
+* all 17 Playwright dashboard tests against deterministic offline fixtures and health stubs for GPU/external services.
+
+Run the local equivalents with `uv run pytest` in each service, `uv run --with pyyaml==6.0.3 python scripts/check_config.py`, and `uv run --with mcp==2.3.0 python scripts/verify_mcp.py` (with the stack running).
 
 ## LLM requirements
 

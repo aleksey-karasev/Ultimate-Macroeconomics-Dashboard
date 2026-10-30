@@ -1,7 +1,9 @@
 """Shared fixtures for the app smoke suite.
 
-`theming.py` looks for `themes.yaml` in a small set of locations; in the test
-environment we point it at the bundled `_container_data/themes.yaml` via cwd.
+A minimal config stub is created before test modules are imported because some
+app modules load ``config.yaml`` at import time. ``theming.py`` looks for
+``themes.yaml`` in a small set of locations; tests point it at the bundled
+``_container_data/themes.yaml`` via cwd.
 """
 
 from __future__ import annotations
@@ -10,6 +12,19 @@ import os
 from pathlib import Path
 
 import pytest
+
+_STUB = """\
+whisper: {}
+"""
+
+
+def _ensure_config_file() -> None:
+    config_path = Path.cwd() / "config.yaml"
+    if not config_path.is_file():
+        config_path.write_text(_STUB, encoding="utf-8")
+
+
+_ensure_config_file()
 
 
 @pytest.fixture(autouse=True)

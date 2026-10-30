@@ -16,7 +16,7 @@ import polars as pl
 import streamlit as st
 
 from core.app_logging import log_sql_query
-from core.config import load_config
+from core.config import build_postgres_uri, load_config
 from core.settings import get_settings
 
 CONFIG_PATH = Path("config.yaml")
@@ -29,10 +29,12 @@ _PG = CONFIG.postgres
 # reads it from there on first volume init). config.yaml's `database` stays as
 # a fallback for environments that don't set the env var.
 _PG_DATABASE = SETTINGS.postgres_db or _PG.database
-SQL_URL = (
-    f"postgresql://"
-    f"{SETTINGS.postgres_llm_user}:{SETTINGS.postgres_llm_password}"
-    f"@{_PG.host}:{_PG.port}/{_PG_DATABASE}"
+SQL_URL = build_postgres_uri(
+    username=SETTINGS.postgres_llm_user,
+    password=SETTINGS.postgres_llm_password,
+    host=_PG.host,
+    port=_PG.port,
+    database=_PG_DATABASE,
 )
 POSTGRES_TARGET = f"{_PG.host}:{_PG.port}"
 

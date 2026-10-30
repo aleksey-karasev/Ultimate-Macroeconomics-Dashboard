@@ -24,6 +24,21 @@ repos:
       # Formatter (the equivalent of `ruff format`).
       - id: ruff-format
 
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      # Root `taplo.toml` is the single formatting/lint configuration.
+      - id: taplo-format
+      - id: taplo-lint
+        args: [] # Skip the default remote schema-catalog fetch; keep hooks offline-safe.
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.24.0
+    hooks:
+      # Auto-discovers the shared root `.markdownlint.json` config.
+      - id: markdownlint-cli2
+        args: [--fix --config .markdownlint.jsonc]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -34,8 +49,13 @@ repos:
         args: [--fix=lf] # match ruff.toml's `lf` line endings
       - id: check-yaml
         args: [--allow-multiple-documents] # database_schema.yaml etc.
+        # Compose's !reset extension is not standard YAML; CI validates this
+        # override with `docker compose config` instead of PyYAML.
+        exclude: ^docker-compose\.ci\.yaml$
       - id: check-toml
       - id: check-json
+        # markdownlint's shared config intentionally uses JSONC comments.
+        exclude: ^\.markdownlint\.json$
       - id: check-added-large-files
         args: [--maxkb=1024]
       - id: check-merge-conflict

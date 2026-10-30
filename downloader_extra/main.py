@@ -23,7 +23,7 @@ from client_eurostat import fetch_and_store_eurostat
 from client_fred import fetch_and_store_fred
 from client_wb import fetch_and_store_indicator
 from client_yahoo import fetch_and_store_yahoo
-from config import load_config
+from config import build_postgres_uri, load_config
 from fastapi import FastAPI, HTTPException
 from schema import (
     Base,
@@ -46,10 +46,12 @@ SETTINGS = get_settings()
 
 _PG = CONFIG.postgres
 _PG_DATABASE = SETTINGS.postgres_db or _PG.database
-SQL_URI = (
-    f"postgresql+psycopg2://"
-    f"{SETTINGS.postgres_user}:{SETTINGS.postgres_password}"
-    f"@{_PG.host}:{_PG.port}/{_PG_DATABASE}"
+SQL_URI = build_postgres_uri(
+    username=SETTINGS.postgres_user,
+    password=SETTINGS.postgres_password,
+    host=_PG.host,
+    port=_PG.port,
+    database=_PG_DATABASE,
 )
 
 

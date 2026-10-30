@@ -1,8 +1,9 @@
 """Validation tests for the agent's typed ``config.yaml`` view."""
 
-from agent.config import AgentConfig, SharedConfig
+from agent.config import AgentConfig, SharedConfig, build_postgres_uri
 from pydantic import ValidationError
 import pytest
+from sqlalchemy.engine import make_url
 
 VALID: dict = {
     "shared": {
@@ -45,3 +46,15 @@ def test_missing_required_section_raises() -> None:
 def test_missing_required_shared_model_raises() -> None:
     with pytest.raises(ValidationError):
         SharedConfig()  # ty: ignore[missing-argument]
+
+
+def test_postgres_uri_percent_encodes_credentials() -> None:
+    uri = build_postgres_uri("llm@example", "p@ss/word", "db", 5432, "macro")
+    parsed = make_url(uri)
+
+    assert "llm%40example:p%40ss%2Fword" in uri
+    assert parsed.username == "llm@example"
+    assert parsed.password == "p@ss/word"
+    assert parsed.host == "db"
+    assert parsed.port == 5432
+    assert parsed.database == "macro"

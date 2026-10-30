@@ -10,6 +10,7 @@ owned by other services) are ignored.
 from pathlib import Path
 
 from pydantic import BaseModel, model_validator
+from sqlalchemy.engine import URL
 import yaml
 
 
@@ -73,6 +74,20 @@ class AgentConfig(BaseModel):
     python_sandbox: PortConfig
     downloader_extra: PortConfig
     langfuse: LangfuseConfig = LangfuseConfig()
+
+
+def build_postgres_uri(
+    username: str, password: str, host: str, port: int, database: str | None
+) -> str:
+    """Build a SQLAlchemy Postgres URI with safely percent-encoded credentials."""
+    return URL.create(
+        "postgresql+psycopg2",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    ).render_as_string(hide_password=False)
 
 
 def load_config(path: Path) -> AgentConfig:

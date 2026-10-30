@@ -21,6 +21,7 @@ whole request, so one bad attachment never sinks the others.
 from __future__ import annotations
 
 import base64
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
@@ -36,9 +37,10 @@ logger = logging.getLogger(__name__)
 CONFIG = load_config(Path("config.yaml"))
 SETTINGS = get_settings()
 
-# docling PDF conversion runs a remote VLM, so give it a generous ceiling.
-_DOCLING_TIMEOUT_SECONDS = 180.0
-_WHISPER_TIMEOUT_SECONDS = 120.0
+# Whole-document OCR can take several minutes (many VLM calls per PDF), while
+# each individual VLM request has its own shorter timeout in the docling service.
+_DOCLING_TIMEOUT_SECONDS = 900.0
+_WHISPER_TIMEOUT_SECONDS = 300.0
 
 TEXT_EXTS = {".json", ".md", ".txt"}
 IMAGE_MIME_BY_EXT = {
@@ -85,7 +87,9 @@ def transcribe_audio(filename: str, data: bytes) -> str:
         )
     response.raise_for_status()
     payload = response.json()
-    return str(payload.get("text", "") or "").strip()
+    transcript = str(payload.get("text", "") or "").strip()
+    logger.info("Audio transcribed for %s: %d characters", filename, len(transcript))
+    return transcript
 
 
 def convert_document(filename: str, content_type: str | None, data: bytes) -> str:
@@ -98,7 +102,9 @@ def convert_document(filename: str, content_type: str | None, data: bytes) -> st
         )
     response.raise_for_status()
     payload = response.json()
-    return str(payload.get("markdown", "") or "").strip()
+    markdown = str(payload.get("markdown", "") or "").strip()
+    logger.info("Document converted for %s: %d Markdown characters", filename, len(markdown))
+    return markdown
 
 
 def _process_one(
@@ -165,6 +171,16 @@ def augment_message(user_message: str, text_blocks: list[str]) -> str:
     parts = [user_message.strip()] if user_message.strip() else []
     parts.extend(text_blocks)
     return "\n\n".join(parts)
+
+
+def api_message_content(message: Mapping[str, object]) -> str:
+    """Return the full agent-bound text for a stored chat message.
+
+    ``content`` is the concise text displayed in the UI. When attachments were
+    processed, ``api_content`` also carries their Markdown/transcript so later
+    turns retain the same document context as the original upload turn.
+    """
+    return str(message.get("api_content") or message.get("content", ""))
 
 
 def supported_upload_extensions() -> list[str]:

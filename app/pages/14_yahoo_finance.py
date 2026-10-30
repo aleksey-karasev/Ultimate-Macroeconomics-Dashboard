@@ -424,13 +424,18 @@ def render_yahoo_finance_dashboard() -> None:
         if year_key not in st.session_state:
             st.session_state[year_key] = default_year
 
-        selected_year = st.slider(
-            "Year filter",
-            min_value=min_year,
-            max_value=max_year,
-            key=year_key,
-            help="Applies to Companies treemap and Companies correlation heatmap only.",
-        )
+        if min_year == max_year:
+            selected_year = min_year
+            st.session_state[year_key] = selected_year
+            st.caption(f"Only one year available: {selected_year}")
+        else:
+            selected_year = st.slider(
+                "Year filter",
+                min_value=min_year,
+                max_value=max_year,
+                key=year_key,
+                help="Applies to Companies treemap and Companies correlation heatmap only.",
+            )
 
         year_df = companies_all.filter(pl.col("__year") == int(selected_year)).drop("__year")
         if year_df.is_empty():

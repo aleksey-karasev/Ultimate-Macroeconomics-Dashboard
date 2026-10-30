@@ -1678,6 +1678,10 @@ class GraphBox:
             model_params: dict[str, Any] = dict(settings.get("model_params") or {})
 
             df_hist_raw = self._fetch_data()
+            if df_hist_raw.is_empty():
+                st.warning(f"No data available for {self.name}.")
+                return
+
             df_hist_non_null = df_hist_raw.filter(pl.col(schema["y"]).is_not_null())
             with_year = df_hist_non_null.with_columns(
                 pl.col(schema["x"]).cast(pl.Int64).alias("__year")

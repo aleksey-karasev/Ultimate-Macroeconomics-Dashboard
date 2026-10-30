@@ -7,9 +7,17 @@ dispatch logic is exercised without any network / OpenAI / docling call.
 from __future__ import annotations
 
 import base64
+from unittest.mock import MagicMock
 
 from core import multimodal
-from core.multimodal import ProcessedUploads, augment_message, process_uploads
+from core.multimodal import (
+    ProcessedUploads,
+    api_message_content,
+    augment_message,
+    convert_document,
+    process_uploads,
+    transcribe_audio,
+)
 import pytest
 
 
@@ -98,3 +106,45 @@ def test_processed_uploads_defaults() -> None:
     empty = ProcessedUploads()
     assert empty.text_blocks == []
     assert empty.images == []
+
+
+def test_api_message_content_preserves_ocr_for_follow_up_turns() -> None:
+    message = {
+        "role": "user",
+        "content": "Summarize the report",
+        "api_content": "Summarize the report\n\n--- Attached file ---\nfull OCR text",
+    }
+    assert api_message_content(message).endswith("full OCR text")
+
+
+def test_api_message_content_uses_display_text_for_regular_messages() -> None:
+    assert api_message_content({"role": "user", "content": "Hello"}) == "Hello"
+
+
+def _mock_http_client(monkeypatch: pytest.MonkeyPatch, payload: dict) -> MagicMock:
+    client = MagicMock()
+    client.__enter__.return_value = client
+    response = MagicMock()
+    response.json.return_value = payload
+    client.post.return_value = response
+    factory = MagicMock(return_value=client)
+    monkeypatch.setattr(multimodal.httpx, "Client", factory)
+    return factory
+
+
+def test_document_conversion_allows_multi_minute_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    factory = _mock_http_client(monkeypatch, {"markdown": "full OCR text"})
+    monkeypatch.setattr(multimodal, "resolve_docling_base_url", lambda: "http://docling")
+
+    assert convert_document("report.pdf", "application/pdf", b"pdf") == "full OCR text"
+    timeout = factory.call_args.kwargs["timeout"]
+    assert timeout >= 600
+
+
+def test_voice_transcription_allows_long_recordings(monkeypatch: pytest.MonkeyPatch) -> None:
+    factory = _mock_http_client(monkeypatch, {"text": "full transcript"})
+    monkeypatch.setattr(multimodal.SETTINGS, "openai_api_key", "test-key")
+
+    assert transcribe_audio("voice.wav", b"audio") == "full transcript"
+    timeout = factory.call_args.kwargs["timeout"]
+    assert timeout >= 300

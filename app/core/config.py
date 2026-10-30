@@ -10,6 +10,7 @@ sections (``shared``, ``services``, …) are ignored.
 from pathlib import Path
 
 from pydantic import BaseModel
+from sqlalchemy.engine import URL
 import yaml
 
 
@@ -72,6 +73,20 @@ class AppConfig(BaseModel):
     triton: TritonConfig = TritonConfig()
     docling: DoclingConfig = DoclingConfig()
     whisper: WhisperConfig = WhisperConfig()
+
+
+def build_postgres_uri(
+    username: str, password: str, host: str, port: int, database: str | None
+) -> str:
+    """Build a ConnectorX Postgres URI with safely percent-encoded credentials."""
+    return URL.create(
+        "postgresql",
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    ).render_as_string(hide_password=False)
 
 
 def load_config(path: Path) -> AppConfig:

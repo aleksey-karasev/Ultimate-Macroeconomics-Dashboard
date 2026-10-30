@@ -18,7 +18,12 @@ import uuid
 
 from core.api_client import agent_chat_stream
 from core.app_logging import log_page_render
-from core.multimodal import augment_message, process_uploads, supported_upload_extensions
+from core.multimodal import (
+    api_message_content,
+    augment_message,
+    process_uploads,
+    supported_upload_extensions,
+)
 from core.plotting import apply_plotly_theme
 import plotly.io as pio
 import polars as pl
@@ -223,7 +228,7 @@ def _trim_history_for_api() -> list[dict[str, str]]:
     history: list[dict[str, str]] = []
     for message in raw_messages[-24:]:
         role = str(message.get("role", "assistant"))
-        content = str(message.get("content", ""))
+        content = api_message_content(message)
         if role in {"user", "assistant"} and content.strip():
             history.append({"role": role, "content": content})
     return history
@@ -277,7 +282,11 @@ def _handle_chat() -> None:
         accept_file="multiple",
         file_type=supported_upload_extensions(),
     )
-    if not submission:
+    # A voice recording is itself a complete submission: st.chat_input returns
+    # no value until the user sends text/files, so collect voice before the
+    # no-submission guard instead of silently dropping voice-only turns.
+    voice = _collect_voice_attachment()
+    if not submission and voice is None:
         return
 
     # With accept_file set, chat_input yields an object carrying .text + .files;
@@ -288,7 +297,6 @@ def _handle_chat() -> None:
     attachments: list[tuple[str, str | None, bytes]] = [
         (uploaded.name, uploaded.type, uploaded.getvalue()) for uploaded in uploaded_files
     ]
-    voice = _collect_voice_attachment()
     if voice is not None:
         attachments.append(voice)
 
@@ -306,9 +314,18 @@ def _handle_chat() -> None:
     else:
         agent_message = prompt_text
 
+    # History contains only earlier turns; the current turn is sent once as
+    # user_message. Keep the concise display text separate from the full text
+    # (including OCR/transcripts) that must remain available on follow-up turns.
+    history_for_api = _trim_history_for_api()
     display_text = prompt_text or "_(sent attachments)_"
     st.session_state[CHAT_STATE_KEY].append(
-        {"role": "user", "content": display_text, "attachments": attachment_names}
+        {
+            "role": "user",
+            "content": display_text,
+            "api_content": agent_message,
+            "attachments": attachment_names,
+        }
     )
     with st.chat_message("user"):
         st.markdown(display_text)
@@ -333,7 +350,7 @@ def _handle_chat() -> None:
         try:
             for event in agent_chat_stream(
                 user_message=agent_message,
-                chat_history=_trim_history_for_api(),
+                chat_history=history_for_api,
                 session_id=st.session_state.get(SESSION_ID_KEY),
                 images=images or None,
             ):
@@ -414,4 +431,5 @@ def render_page() -> None:
     _handle_chat()
 
 
-render_page()
+if __name__ == "__main__":
+    render_page()

@@ -1,8 +1,9 @@
 """Validation tests for the dashboard's typed ``config.yaml`` view."""
 
-from core.config import AppConfig
+from core.config import AppConfig, build_postgres_uri
 from pydantic import ValidationError
 import pytest
+from sqlalchemy.engine import make_url
 
 
 def test_valid_config_parses() -> None:
@@ -32,3 +33,15 @@ def test_service_port_defaults() -> None:
 def test_invalid_port_raises() -> None:
     with pytest.raises(ValidationError):
         AppConfig.model_validate({"forecaster": {"port": "nope"}})
+
+
+def test_postgres_uri_percent_encodes_credentials() -> None:
+    uri = build_postgres_uri("llm@example", "p@ss/word", "db", 5432, "macro")
+    parsed = make_url(uri)
+
+    assert "llm%40example:p%40ss%2Fword" in uri
+    assert parsed.username == "llm@example"
+    assert parsed.password == "p@ss/word"
+    assert parsed.host == "db"
+    assert parsed.port == 5432
+    assert parsed.database == "macro"

@@ -4,12 +4,18 @@ All notable changes to **Ultimate Macroeconomics Dashboard** are documented in t
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v0.17]
+
+### Fixed
+
+- Removed environment-dependent live MCP server tests from CI; MCP configuration remains statically validated.
+
 ## [v0.16]
 
 ### Added
 
-- **CI coverage for every service.** GitHub Actions now runs formatting, linting, type checking, lockfile validation, unit/component tests, Docker builds, live MCP integration, and all 17 Playwright tests on pull requests to `dev`/`main` and pushes to those branches, without automatic branch merges.
-- **Read-only MCP integrations.** `.mcp.json` now includes pinned Postgres, ClickHouse, Grafana, and Langfuse servers, with a live verification script, loopback-only ClickHouse HTTP access, and deterministic offline integration fixtures.
+- **CI coverage for every service.** GitHub Actions now runs formatting, linting, type checking, lockfile validation, unit/component tests, Docker builds, and all 17 Playwright tests on pull requests to `dev`/`main` and pushes to those branches, without automatic branch merges.
+- **Read-only MCP integrations.** `.mcp.json` now includes pinned Postgres, ClickHouse, Grafana, and Langfuse servers, with loopback-only ClickHouse HTTP access and deterministic offline integration fixtures.
 
 ### Changed
 

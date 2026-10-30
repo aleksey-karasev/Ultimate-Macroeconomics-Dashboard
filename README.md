@@ -65,8 +65,8 @@ The stack is a set of `Docker` containers following a strict micro-service desig
 Prerequisites: Docker (with the Compose plugin) and a working **NVIDIA GPU + the NVIDIA Container Toolkit** — the `triton` service reserves the GPU for all model inference.
 
 ```bash
-# 1. Clone repo (pin a released version with --branch, e.g. v0.16)
-git clone --branch v0.16 https://github.com/alexveider1/Ultimate-Macroeconomics-Dashboard
+# 1. Clone repo (pin a released version with --branch, e.g. v0.17)
+git clone --branch v0.17 https://github.com/alexveider1/Ultimate-Macroeconomics-Dashboard
 cd Ultimate-Macroeconomics-Dashboard/
 
 # 2. Create the `.env` file (fill in your secrets)
@@ -125,13 +125,7 @@ export LANGFUSE_MCP_BASIC_AUTH="$(printf '%s' "${LANGFUSE_PUBLIC_KEY}:${LANGFUSE
 set -a; source .env; set +a
 ```
 
-Verify all four servers with the running stack:
-
-```bash
-uv run --with mcp==2.3.0 python scripts/verify_mcp.py
-```
-
-The checker initializes each server and calls one read-only tool. `scripts/check_config.py` separately rejects mutable `:latest` images and missing MCP/package pins.
+`scripts/check_config.py` validates the MCP configuration and rejects mutable `:latest` images or missing MCP package pins. Live MCP connectivity is intentionally not tested in CI because it depends on the local environment.
 
 ## Continuous integration
 
@@ -140,10 +134,9 @@ GitHub Actions runs on pull requests targeting `dev` or `main`, and on pushes to
 * formatting, Ruff linting, `ty`, lockfile checks, and unit/component tests for all 10 Python services;
 * Taplo TOML formatting/linting and markdownlint-cli2 checks using the shared root configs;
 * Docker builds for the application services that fit hosted runners;
-* live read-only MCP integration against fresh Postgres, Qdrant, ClickHouse, and Langfuse/Grafana services;
 * all 17 Playwright dashboard tests against deterministic offline fixtures and health stubs for GPU/external services.
 
-Run the local equivalents with `uv run pytest` in each service, `uv run --with pyyaml==6.0.3 python scripts/check_config.py`, and `uv run --with mcp==2.3.0 python scripts/verify_mcp.py` (with the stack running).
+Run the local equivalents with `uv run pytest` in each service and `uv run --with pyyaml==6.0.3 python scripts/check_config.py`.
 
 ## LLM requirements
 

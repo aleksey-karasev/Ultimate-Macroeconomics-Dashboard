@@ -1,5 +1,5 @@
 {
-  "base_url": "https://actually-relevant-api.onrender.com",
+  "base_url": "https://api.actuallyrelevant.news/",
   "page_size": 100,
   "topics": [
     {

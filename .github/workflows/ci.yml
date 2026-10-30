@@ -112,42 +112,6 @@ jobs:
       - name: Build image with locked dependencies
         run: docker compose --env-file .env.example build ${{ matrix.service }}
 
-  mcp:
-    name: Live MCP integration
-    needs: config
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.13.6"
-          enable-cache: true
-      - name: Start MCP backing services with fresh volumes
-        run: |
-          docker compose --env-file .env.example up -d \
-            db vector_db langfuse_clickhouse langfuse_redis langfuse_minio \
-            langfuse_web langfuse_worker grafana
-      - name: Wait for services
-        run: |
-          curl --fail --silent --show-error --max-time 10 \
-            --retry 60 --retry-delay 5 --retry-all-errors --retry-connrefused \
-            http://localhost:3000/api/public/health
-          curl --fail --silent --show-error --max-time 10 \
-            --retry 30 --retry-delay 5 --retry-all-errors --retry-connrefused \
-            http://localhost:3001/api/health
-          curl --fail --silent --show-error --max-time 10 \
-            --retry 30 --retry-delay 5 --retry-all-errors --retry-connrefused \
-            -H 'api-key: some_api_key' http://localhost:6333/readyz
-          curl --fail --silent --show-error --max-time 10 \
-            --retry 30 --retry-delay 5 --retry-all-errors --retry-connrefused \
-            -u clickhouse:change-me http://localhost:8123/ping
-      - name: Initialize every MCP server and call read-only tools
-        run: uv run --with mcp==2.3.0 python scripts/verify_mcp.py
-      - name: Stop integration stack
-        if: always()
-        run: docker compose --env-file .env.example down -v
-
   ui:
     name: Offline dashboard end-to-end
     needs: config

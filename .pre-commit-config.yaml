@@ -49,6 +49,9 @@ repos:
         args: [--fix=lf] # match ruff.toml's `lf` line endings
       - id: check-yaml
         args: [--allow-multiple-documents] # database_schema.yaml etc.
+        # Compose's !reset extension is not standard YAML; CI validates this
+        # override with `docker compose config` instead of PyYAML.
+        exclude: ^docker-compose\.ci\.yaml$
       - id: check-toml
       - id: check-json
         # markdownlint's shared config intentionally uses JSONC comments.

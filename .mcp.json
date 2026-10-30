@@ -2,9 +2,54 @@
   "mcpServers": {
     "postgres": {
       "command": "uvx",
-      "args": ["postgres-mcp", "--access-mode=restricted"],
+      "args": [
+        "--python",
+        "3.12",
+        "--overrides",
+        "scripts/mcp-overrides.txt",
+        "--from",
+        "postgres-mcp==0.3.0",
+        "postgres-mcp",
+        "--access-mode=restricted"
+      ],
       "env": {
-        "DATABASE_URI": "postgresql://${POSTGRES_LLM_USER:-llm_username}:${POSTGRES_LLM_PASSWORD}@localhost:5432/${POSTGRES_DB:-postgres}"
+        "DATABASE_URI": "postgresql://${POSTGRES_LLM_USER:-llm_username}:${POSTGRES_LLM_PASSWORD}@localhost:5432/${POSTGRES_DB:-macro}"
+      }
+    },
+    "clickhouse": {
+      "command": "uvx",
+      "args": [
+        "mcp-clickhouse==0.7.0"
+      ],
+      "env": {
+        "CLICKHOUSE_HOST": "localhost",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_USER": "clickhouse",
+        "CLICKHOUSE_PASSWORD": "${LANGFUSE_CLICKHOUSE_PASSWORD}",
+        "CLICKHOUSE_SECURE": "false",
+        "CLICKHOUSE_VERIFY": "false",
+        "CLICKHOUSE_ALLOW_WRITE_ACCESS": "false",
+        "CLICKHOUSE_CONNECT_TIMEOUT": "30"
+      }
+    },
+    "grafana": {
+      "command": "uvx",
+      "args": [
+        "mcp-grafana==2.1.1",
+        "--disable-write"
+      ],
+      "env": {
+        "GRAFANA_URL": "http://localhost:3001",
+        "GRAFANA_USERNAME": "admin",
+        "GRAFANA_PASSWORD": "${GRAFANA_ADMIN_PASSWORD}",
+        "GRAFANA_USAGE_STATS": "disabled"
+      }
+    },
+    "langfuse": {
+      "type": "http",
+      "url": "http://localhost:3000/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_MCP_BASIC_AUTH}"
       }
     }
   }

@@ -89,6 +89,16 @@ def _restore_postgres(file_name: str, download_dir: Path) -> None:
     logger.info("Postgres restore complete.")
 
 
+def _host_snapshot_path(local: Path) -> str:
+    """Translate the backup container's bind-mounted path to its host equivalent."""
+    container_path = local if local.is_absolute() else Path.cwd() / local
+    try:
+        relative = container_path.relative_to(Path.cwd() / "_container_data")
+    except ValueError:
+        return str(container_path)
+    return f"$(pwd)/_container_data/backup/{relative.as_posix()}"
+
+
 def _restore_qdrant(file_name: str, download_dir: Path) -> None:
     config = load_config(CONFIG_PATH)
     backup = config.backup
@@ -98,26 +108,26 @@ def _restore_qdrant(file_name: str, download_dir: Path) -> None:
         f"{backup.rclone_path}/qdrant/{file_name}",
         download_dir / file_name,
     )
+    host_snapshot = _host_snapshot_path(local)
     print(
         f"""
 Downloaded Qdrant full snapshot to: {local}
 
 A full-storage snapshot is restored by recovering it into Qdrant's storage at
 startup (there is no single live-instance API call for a *full* snapshot).
-Recommended procedure (brief Qdrant downtime):
+Run these commands from the repository root (brief Qdrant downtime):
 
-  1. Stop writers so nothing mutates Qdrant during recovery:
-       docker compose stop app agent
+  1. Stop writers and the running Qdrant server so its storage cannot change:
+       docker compose stop app agent vector_db
 
-  2. Copy the snapshot into the Qdrant container:
-       docker cp {local} qdrant_db:/qdrant/snapshots/{file_name}
-
-  3. Recover into storage by starting Qdrant once with the recovery flag
-     (this rebuilds /qdrant/storage from the snapshot):
-       docker compose run --rm --entrypoint ./qdrant vector_db \\
+  2. Recover into storage with a one-off Qdrant container. The snapshot is
+     mounted directly from the host, and the named storage volume is shared:
+       docker compose run --rm \\
+         --volume "{host_snapshot}:/qdrant/snapshots/{file_name}:ro" \\
+         --entrypoint ./qdrant vector_db \\
          --storage-snapshot /qdrant/snapshots/{file_name}
 
-  4. Bring the stack back up:
+  3. Bring the stack back up:
        docker compose up -d
 
 See https://qdrant.tech/documentation/concepts/snapshots/ for details.

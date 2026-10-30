@@ -4,6 +4,12 @@ All notable changes to **Ultimate Macroeconomics Dashboard** are documented in t
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v0.17]
+
+### Fixed
+
+- MCP server tests
+
 ## [v0.16]
 
 ### Added

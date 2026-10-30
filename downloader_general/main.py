@@ -9,11 +9,10 @@ successful run; subsequent boots see the marker and skip the initial ingest but
 still re-apply the bootstrap. The downloaders run in order: World Bank → news →
 Yahoo → Binance → FRED → Eurostat → Actually Relevant → World Bank articles.
 
-Once the initial ingest is done, the process does **not** exit: if
-``scheduler.enabled`` it hands off to :func:`src.scheduler.run_scheduler`, which
-keeps the container alive and refreshes each source on its own interval by
-calling that source's incremental ``update()`` (append-only). The container is
-therefore long-running (``restart: unless-stopped`` in Compose) and reports
+Once the initial ingest is done, the process does **not** exit: it hands off to
+:func:`src.scheduler.run_scheduler`, which refreshes each enabled source on its
+own interval by calling its incremental ``update()`` (append-only), or idles when
+scheduling is disabled. The container is therefore long-running and reports
 healthy via the ``.download_completed`` marker so dependents that used to wait on
 ``service_completed_successfully`` now wait on ``service_healthy``.
 """
@@ -176,13 +175,17 @@ def build_downloaders(
 
 
 def run_initial_ingest(downloaders: dict[str, tuple[Any, Callable[[], bool]]]) -> None:
-    """Run each source's full ``run()`` once, skipping sources whose init fails."""
+    """Run every source once, failing the boot if any source cannot initialize.
+
+    A failed source must never produce a completion marker: doing so would make
+    every later restart skip the missing data and release dependents prematurely.
+    Exceptions from a source's ``run()`` likewise propagate to prevent the marker.
+    """
     for name in INGEST_ORDER:
         downloader, init = downloaders[name]
-        if init():
-            downloader.run()
-        else:
-            logger.warning("Skipping initial ingest for %s: connection init failed", name)
+        if not init():
+            raise RuntimeError(f"Initial ingest failed to initialize source: {name}")
+        downloader.run()
 
 
 def build_jobs(
@@ -245,9 +248,9 @@ def main() -> None:
     The bootstrap runs on every container start (idempotent + cheap, and the path
     that grants ``SELECT`` on tables added since the marker was written). The
     initial full ingest is gated by ``DEFAULT_DOWNLOAD_MARKER`` (overrideable via
-    ``DOWNLOADER_ONCE_MARKER``). Regardless of whether the ingest ran, if
-    ``scheduler.enabled`` the process then hands off to the incremental scheduler
-    and stays alive.
+    ``DOWNLOADER_ONCE_MARKER``). Regardless of whether the ingest ran, the process
+    then hands off to the incremental scheduler and stays alive (idling when
+    scheduling is disabled).
     """
     container_data_dir = Path("_container_data")
     # The news pipeline clones + unzips a multi-GB Webhose repo. Keep that scratch
@@ -304,18 +307,14 @@ def main() -> None:
         )
     else:
         run_initial_ingest(downloaders)
-        try:
-            marker_path.parent.mkdir(parents=True, exist_ok=True)
-            marker_path.touch()
-            logger.info("Download marker written: %s", marker_path)
-        except OSError:
-            logging.exception("Could not write download marker at %s", marker_path)
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.touch()
+        logger.info("Download marker written: %s", marker_path)
 
-    if config.scheduler.enabled:
-        jobs = build_jobs(downloaders, config)
-        run_scheduler(jobs, run_on_start=config.scheduler.run_on_start)
-    else:
-        logger.info("Scheduler disabled (scheduler.enabled=false); exiting after ingest.")
+    jobs = build_jobs(downloaders, config) if config.scheduler.enabled else []
+    if not config.scheduler.enabled:
+        logger.info("Scheduler disabled (scheduler.enabled=false); idling until stopped.")
+    run_scheduler(jobs, run_on_start=config.scheduler.run_on_start)
 
 
 if __name__ == "__main__":

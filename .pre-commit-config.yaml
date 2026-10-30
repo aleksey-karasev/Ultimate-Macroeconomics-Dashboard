@@ -37,7 +37,7 @@ repos:
     hooks:
       # Auto-discovers the shared root `.markdownlint.json` config.
       - id: markdownlint-cli2
-        args: [--fix]
+        args: [--fix --config .markdownlint.json]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

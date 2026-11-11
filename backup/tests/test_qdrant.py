@@ -72,3 +72,40 @@ def test_snapshot_qdrant_survives_delete_failure(
         base_url="http://vector_db:6333", api_key="secret", out_dir=tmp_path
     )
     assert out.read_bytes() == b"QDRANTDATA"
+
+
+class _BrokenDownload(httpx.SyncByteStream):
+    def __iter__(self):
+        yield b"PARTIAL"
+        raise httpx.ReadError("Snapshot download interrupted")
+
+
+@pytest.mark.parametrize("delete_fails", [False, True])
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_snapshot_qdrant_cleans_up_failed_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    delete_fails: bool,
+    interrupted: bool,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            if interrupted:
+                return httpx.Response(200, stream=_BrokenDownload())
+            return httpx.Response(503)
+        if request.method == "DELETE" and delete_fails:
+            return httpx.Response(500)
+        return _handler(request)
+
+    seen = _install_mock(monkeypatch, handler)
+    expected_error = httpx.ReadError if interrupted else httpx.HTTPStatusError
+    with pytest.raises(expected_error):
+        backup_qdrant.snapshot_qdrant(
+            base_url="http://vector_db:6333", api_key="secret", out_dir=tmp_path
+        )
+
+    assert [(r.method, r.url.path) for r in seen] == [
+        ("POST", "/snapshots"),
+        ("GET", f"/snapshots/{SNAPSHOT}"),
+        ("DELETE", f"/snapshots/{SNAPSHOT}"),
+    ]

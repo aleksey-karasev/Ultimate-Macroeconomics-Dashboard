@@ -16,10 +16,11 @@ thread so the event loop stays free.
 """
 
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 
 from client_binance import fetch_and_store_binance
-from client_eurostat import fetch_and_store_eurostat
+from client_eurostat import eurostat_indicator_id, fetch_and_store_eurostat
 from client_fred import fetch_and_store_fred
 from client_wb import fetch_and_store_indicator
 from client_yahoo import fetch_and_store_yahoo
@@ -36,7 +37,7 @@ from schema import (
     YahooMetadata,
 )
 from settings import get_settings
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 CONFIG_PATH = Path("config.yaml")
@@ -230,24 +231,27 @@ async def _ingest_fred(payload: IngestRequest) -> IngestResponse:
 
 
 async def _ingest_eurostat(payload: IngestRequest) -> IngestResponse:
-    """Eurostat path: short-circuit on the dataset slug in eurostat_indicators then fetch.
-
-    The slug is the lower-cased dataset code; if it (or an already-loaded config
-    indicator sharing the same ``dataset``) is present, the fetch is skipped.
-    """
+    """Reuse a matching dataset/filter panel, preserving legacy and curated slugs."""
     if not payload.dataset:
         raise HTTPException(status_code=400, detail="eurostat requires dataset")
-    dataset = payload.dataset.strip()
-    slug = dataset.lower()
+    dataset = payload.dataset.strip().lower()
+    filters = payload.filters or {}
+    slug = eurostat_indicator_id(dataset, filters)
 
-    if _already_present(
-        app.state.session_factory, EurostatIndicator, indicator_id=slug
-    ) or _already_present(app.state.session_factory, EurostatIndicator, dataset=dataset):
-        return IngestResponse(
-            source="eurostat", identifier=slug, rows_inserted=0, status="already_downloaded"
-        )
+    with app.state.session_factory() as session:
+        candidates = session.scalars(
+            select(EurostatIndicator).where(func.lower(EurostatIndicator.dataset) == dataset)
+        ).all()
+        for indicator in candidates:
+            if json.loads(indicator.filters or "{}") == filters:
+                return IngestResponse(
+                    source="eurostat",
+                    identifier=indicator.indicator_id,
+                    rows_inserted=0,
+                    status="already_downloaded",
+                )
 
-    rows_inserted = await fetch_and_store_eurostat(dataset, payload.filters, app.state.sql_uri)
+    rows_inserted = await fetch_and_store_eurostat(dataset, filters, app.state.sql_uri)
     return IngestResponse(
         source="eurostat", identifier=slug, rows_inserted=rows_inserted, status="success"
     )

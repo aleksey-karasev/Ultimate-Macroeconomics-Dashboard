@@ -4,17 +4,18 @@ Called by ``downloader_extra``'s ``POST /ingest`` endpoint when the agent asks
 about an EU regional indicator not yet in the database. The request carries a
 Eurostat ``dataset`` code (e.g. ``nama_10r_2gdp``) plus optional ``filters`` that
 pin the dataset's extra dimensions; this module fetches the whole NUTS-2 region
-panel in one keyless call and replaces any prior copy of that dataset in Postgres.
+panel in one keyless call and replaces any prior copy of that filtered panel in Postgres.
 
-The stored ``indicator_id`` slug is the lower-cased dataset code (on-demand items
-have no curated slug, mirroring how the Binance/FRED paths use the pair symbol /
-series id); the human-readable dataset label is stored as ``name``. The
+The stored ``indicator_id`` combines the lower-cased dataset code with a stable
+digest of its filters, so different units or demographic slices can coexist.
+The human-readable dataset label is stored as ``name``. The
 ``eurostat_regions`` catalogue is assumed to already exist (populated by
 ``downloader_general``); values are filtered to codes present in it so the enforced
 FK holds.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 
@@ -27,6 +28,17 @@ logger = logging.getLogger(__name__)
 
 _NUTS_LEVEL = 2
 _ON_DEMAND_CATEGORY = "On-demand (Eurostat)"
+
+
+def eurostat_indicator_id(dataset: str, filters: dict[str, str] | None) -> str:
+    """Identify a dataset and filter set independently of filter key order.
+
+    Even an unfiltered panel gets a suffix: older releases stored filtered
+    panels under the bare dataset code, which must remain safe from replacement.
+    """
+    signature = json.dumps(filters or {}, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(signature.encode("utf-8")).hexdigest()[:16]
+    return f"{dataset.strip().lower()}_{digest}"
 
 
 def _existing_region_ids(session: Session) -> set[str]:
@@ -66,7 +78,7 @@ def _replace_eurostat_indicator(
 async def fetch_and_store_eurostat(
     dataset: str, filters: dict[str, str] | None, sql_uri: str
 ) -> int:
-    """Fetch one Eurostat NUTS-2 dataset and replace any prior copy in Postgres.
+    """Fetch a Eurostat NUTS-2 panel and replace only its own filter variant.
 
     Args:
         dataset: Eurostat dataset code (e.g. ``nama_10r_2gdp``).
@@ -80,6 +92,7 @@ async def fetch_and_store_eurostat(
     Raises:
         ValueError: When the dataset returns no NUTS-2 panel data.
     """
+    dataset = dataset.strip().lower()
     filters = filters or {}
     async with build_async_client() as client:
         payload = await fetch_dataset(
@@ -93,7 +106,7 @@ async def fetch_and_store_eurostat(
     if not rows:
         raise ValueError(f"No NUTS-2 panel data found for Eurostat dataset: {dataset}")
 
-    indicator_id = dataset.strip().lower()
+    indicator_id = eurostat_indicator_id(dataset, filters)
     years = [int(r["year"]) for r in rows]
     min_year, max_year = min(years), max(years)
     description = {

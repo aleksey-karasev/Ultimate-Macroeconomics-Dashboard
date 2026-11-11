@@ -29,7 +29,8 @@ def resolve_forecast_frequency(
     if len(idx) < 2:
         return default
 
-    inferred = pd.infer_freq(idx)
+    # pandas requires three timestamps; two points can still establish a gap.
+    inferred = pd.infer_freq(idx) if len(idx) >= 3 else None
     if inferred:
         return inferred
 

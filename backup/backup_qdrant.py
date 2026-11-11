@@ -41,23 +41,24 @@ def snapshot_qdrant(*, base_url: str, api_key: str, out_dir: Path) -> Path:
         logger.info("Qdrant snapshot created: %s", name)
 
         out_path = out_dir / name
-        with client.stream("GET", f"/snapshots/{name}") as stream:
-            stream.raise_for_status()
-            with out_path.open("wb") as fh:
-                for chunk in stream.iter_bytes():
-                    fh.write(chunk)
-        logger.info(
-            "Qdrant snapshot downloaded -> %s (%s bytes)", out_path, out_path.stat().st_size
-        )
-
         try:
-            client.delete(f"/snapshots/{name}").raise_for_status()
-            logger.info("Deleted server-side Qdrant snapshot %s", name)
-        except httpx.HTTPError:
-            logger.warning(
-                "Failed to delete server-side Qdrant snapshot %s (left in place)",
-                name,
-                exc_info=True,
+            with client.stream("GET", f"/snapshots/{name}") as stream:
+                stream.raise_for_status()
+                with out_path.open("wb") as fh:
+                    for chunk in stream.iter_bytes():
+                        fh.write(chunk)
+            logger.info(
+                "Qdrant snapshot downloaded -> %s (%s bytes)", out_path, out_path.stat().st_size
             )
+        finally:
+            try:
+                client.delete(f"/snapshots/{name}").raise_for_status()
+                logger.info("Deleted server-side Qdrant snapshot %s", name)
+            except httpx.HTTPError:
+                logger.warning(
+                    "Failed to delete server-side Qdrant snapshot %s (left in place)",
+                    name,
+                    exc_info=True,
+                )
 
     return out_path

@@ -75,3 +75,16 @@ def test_k_greater_than_rows_raises() -> None:
     request = {"method": "kmeans", "dataframe": _rows(n=3), "k": 5}
     with pytest.raises(clustering.InputError):
         clustering.run(request)
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("feature_columns", [None, ["f0", "f1", "f2"]])
+def test_non_finite_features_raise_input_error(
+    invalid: float, feature_columns: list[str] | None
+) -> None:
+    rows = _rows()
+    rows[2]["f1"] = invalid
+    with pytest.raises(clustering.InputError, match="non-finite"):
+        clustering.run(
+            {"method": "kmeans", "dataframe": rows, "feature_columns": feature_columns, "k": 2}
+        )

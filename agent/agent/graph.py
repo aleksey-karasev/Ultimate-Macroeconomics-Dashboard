@@ -1249,6 +1249,8 @@ class DownloaderAgent:
                     "trace": [f"downloader_agent: failed – {plan.source}/{identifier} – {error}"],
                 }
 
+            # The stored slug can differ from the source dataset/series id.
+            identifier = str(result.get("identifier") or identifier)
             status = result.get("status", "success")
             rows_inserted = result.get("rows_inserted", 0)
             return {

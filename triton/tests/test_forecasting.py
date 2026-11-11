@@ -65,3 +65,22 @@ def test_future_dates_follow_history() -> None:
     result = forecasting.run("moving_average", _payload(n_predict=3))
     # Monthly history → first forecast timestamp is the next month start.
     assert result["ds"][0].startswith("2022-01")
+
+
+def test_moving_average_with_two_historical_points() -> None:
+    result = forecasting.run(
+        "moving_average",
+        {
+            "dates": ["2024-01-01", "2024-01-08"],
+            "values": [10.0, 20.0],
+            "n_predict": 3,
+            "model_params": {"window": 2},
+        },
+    )
+    _assert_shape(result, 3)
+    assert result["ds"] == [
+        "2024-01-15 00:00:00",
+        "2024-01-22 00:00:00",
+        "2024-01-29 00:00:00",
+    ]
+    assert result["yhat"] == [15.0, 15.0, 15.0]

@@ -87,7 +87,10 @@ def _build_feature_matrix(
                 raise InputError(
                     f"Column '{col}' contains a non-finite or non-numeric value at row {row_index}."
                 )
-            values.append(float(raw_value))
+            value = float(raw_value)
+            if not np.isfinite(value):
+                raise InputError(f"Column '{col}' contains a non-finite value at row {row_index}.")
+            values.append(value)
         matrix.append(values)
 
     return np.asarray(matrix, dtype=float), feature_columns

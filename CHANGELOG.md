@@ -4,6 +4,16 @@ All notable changes to **Ultimate Macroeconomics Dashboard** are documented in t
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [v0.18]
+
+### Fixed
+
+Minor bugs in micro-services
+
+### Added
+
+More tests for stable CI
+
 ## [v0.17]
 
 ### Fixed
